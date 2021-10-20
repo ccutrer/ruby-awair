@@ -1,0 +1,69 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "faraday_middleware"
+require "homie-mqtt"
+require "optparse"
+
+refresh = 30.0
+fahrenheit = false
+
+options = OptionParser.new do |opts|
+  opts.banner = "Usage: awair_mqtt_bridge SENSOR_IP MQTT_URI [options]"
+
+  opts.on("--refresh-interval=INTERVAL", "Refresh interval (default 30s)") { |v| refresh = v.to_f }
+  opts.on("-f", "--fahrenheit", "Convert to fahrenheit before publishing") { fahrenheit = true }
+  opts.on("-h", "--help", "Prints this help") do
+    puts opts
+    exit
+  end
+end
+
+options.parse!
+
+unless ARGV.length == 2
+  puts options
+  exit 1
+end
+
+awair = Faraday.new(url: "http://#{ARGV[0]}/air-data/latest") do |f|
+  f.request :retry
+  f.response :raise_error
+  f.response :json
+  f.adapter :net_http_persistent
+end
+
+config = awair.get("/settings/config/data").body
+data = awair.get.body
+
+unit = fahrenheit ? "°F" : "°C"
+def convert_unit(number, use_fahrenheit)
+  return number unless use_fahrenheit
+
+  number * 9 / 5 + 32
+end
+
+homie = MQTT::Homie::Device.new(MQTT::Homie.escape_id(config["device_uuid"]), "Awair Sensor", mqtt: ARGV[1])
+device = homie.node("device", "Device", "Device")
+device.property("score", "Air Quality Score", :integer, data["score"], format: 0..100, unit: "%")
+device.property("dewpoint", "Dew Point", :float, convert_unit(data["dew_point"], fahrenheit), unit: unit)
+device.property("temperature", "Current Temperature", :float, convert_unit(data["temp"], fahrenheit), unit: unit)
+device.property("relative-humidity", "Current Relative Humidity", :float, data["humid"], format: 0..100, unit: "%")
+device.property("co2", "CO₂ Concentration", :integer, data["co2"], unit: "ppm")
+device.property("tvocs", "TVOCs Concentration", :integer, data["voc"], unit: "ppb")
+device.property("pm2-5", "Fine particle concentration", :integer, data["pm25"], unit: "µg/m³")
+
+homie.publish
+
+loop do
+  data = awair.get.body
+  device["score"].value = data["score"]
+  device["dewpoint"].value = convert_unit(data["dew_point"], fahrenheit)
+  device["temperature"].value = convert_unit(data["temp"], fahrenheit)
+  device["relative-humidity"].value = data["humid"]
+  device["co2"].value = data["co2"]
+  device["tvocs"].value = data["voc"]
+  device["pm2-5"].value = data["pm25"]
+
+  sleep refresh
+end
