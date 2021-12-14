@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 require "faraday_middleware"
-require "homie-mqtt"
+require "mqtt-homeassistant"
 require "optparse"
 
 refresh = 30.0
@@ -40,18 +40,65 @@ unit = fahrenheit ? "°F" : "°C"
 def convert_unit(number, use_fahrenheit)
   return number unless use_fahrenheit
 
-  number * 9 / 5 + 32
+  (number * 9 / 5) + 32
 end
 
-homie = MQTT::Homie::Device.new(MQTT::Homie.escape_id(config["device_uuid"]), "Awair Sensor", mqtt: ARGV[1])
-device = homie.node("device", "Device", "Device")
-device.property("score", "Air Quality Score", :integer, data["score"], format: 0..100, unit: "%")
-device.property("dewpoint", "Dew Point", :float, convert_unit(data["dew_point"], fahrenheit), unit: unit)
-device.property("temperature", "Current Temperature", :float, convert_unit(data["temp"], fahrenheit), unit: unit)
-device.property("relative-humidity", "Current Relative Humidity", :float, data["humid"], format: 0..100, unit: "%")
-device.property("co2", "CO₂ Concentration", :integer, data["co2"], unit: "ppm")
-device.property("tvocs", "TVOCs Concentration", :integer, data["voc"], unit: "ppb")
-device.property("pm2-5", "Fine particle concentration", :integer, data["pm25"], unit: "µg/m³")
+homie = MQTT::Homie::Device.new(MQTT::Homie.escape_id(config["device_uuid"]), "Awair Air Quality Sensor", mqtt: ARGV[1])
+homie.home_assistant_device = {
+  manufacturer: "Awair Inc.",
+  sw_version: config["fw_version"]
+}
+device = homie.node("device", "Awair Air Quality Sensor", "Device")
+device.property("score",
+                "Air Quality Score",
+                :integer,
+                data["score"],
+                format: 0..100,
+                unit: "%",
+                hass: { sensor: { icon: "mdi:counter",
+                                  state_class: :measurement } })
+device.property("dewpoint",
+                "Dew Point",
+                :float,
+                convert_unit(data["dew_point"], fahrenheit),
+                unit: unit,
+                hass: { sensor: { device_class: :temperature,
+                                  icon: "mdi:water-opacity",
+                                  state_class: :measurement } })
+device.property("temperature",
+                "Current Temperature",
+                :float,
+                convert_unit(data["temp"], fahrenheit),
+                unit: unit,
+                hass: { sensor: { device_class: :temperature,
+                                  state_class: :measurement } })
+device.property("relative-humidity",
+                "Current Relative Humidity",
+                :float, data["humid"],
+                format: 0..100,
+                unit: "%",
+                hass: { sensor: { device_class: :humidity,
+                                  state_class: :measurement } })
+device.property("co2",
+                "CO₂ Concentration",
+                :integer, data["co2"],
+                unit: "ppm",
+                hass: { sensor: { device_class: :carbon_dioxide,
+                                  state_class: :measurement } })
+device.property("tvocs",
+                "TVOCs Concentration",
+                :integer,
+                data["voc"],
+                unit: "ppb",
+                hass: { sensor: { device_class: :volatile_organic_compounds,
+                                  state_class: :measurement } })
+device.property("pm2-5",
+                "Fine particle concentration",
+                :integer,
+                data["pm25"],
+                unit: "µg/m³",
+                hass: { sensor: { device_class: :pm25,
+                                  state_class: :measurement } })
 
 homie.publish
 
