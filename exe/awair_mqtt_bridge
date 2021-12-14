@@ -40,7 +40,7 @@ unit = fahrenheit ? "°F" : "°C"
 def convert_unit(number, use_fahrenheit)
   return number unless use_fahrenheit
 
-  (number * 9 / 5).round(2) + 32
+  ((number * 9 / 5) + 32).round(2)
 end
 
 homie = MQTT::Homie::Device.new(MQTT::Homie.escape_id(config["device_uuid"]), "Awair Air Quality Sensor", mqtt: ARGV[1])
