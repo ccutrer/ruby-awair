@@ -95,13 +95,15 @@ homie.publish
 
 loop do
   data = awair.get.body
-  device["score"].value = data["score"]
-  device["dewpoint"].value = data["dew_point"]
-  device["temperature"].value = data["temp"]
-  device["relative-humidity"].value = data["humid"]
-  device["co2"].value = data["co2"]
-  device["tvocs"].value = data["voc"]
-  device["pm2-5"].value = data["pm25"]
+  homie.mqtt.batch_publish do
+    device["score"].value = data["score"]
+    device["dewpoint"].value = data["dew_point"]
+    device["temperature"].value = data["temp"]
+    device["relative-humidity"].value = data["humid"]
+    device["co2"].value = data["co2"]
+    device["tvocs"].value = data["voc"]
+    device["pm2-5"].value = data["pm25"]
+  end
 
   sleep refresh
 end
