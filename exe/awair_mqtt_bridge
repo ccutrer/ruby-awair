@@ -6,13 +6,11 @@ require "mqtt-homeassistant"
 require "optparse"
 
 refresh = 30.0
-fahrenheit = false
 
 options = OptionParser.new do |opts|
   opts.banner = "Usage: awair_mqtt_bridge SENSOR_IP MQTT_URI [options]"
 
   opts.on("--refresh-interval=INTERVAL", "Refresh interval (default 30s)") { |v| refresh = v.to_f }
-  opts.on("-f", "--fahrenheit", "Convert to fahrenheit before publishing") { fahrenheit = true }
   opts.on("-h", "--help", "Prints this help") do
     puts opts
     exit
@@ -36,13 +34,6 @@ end
 config = awair.get("/settings/config/data").body
 data = awair.get.body
 
-unit = fahrenheit ? "°F" : "°C"
-def convert_unit(number, use_fahrenheit)
-  return number unless use_fahrenheit
-
-  ((number * 9 / 5) + 32).round(2)
-end
-
 homie = MQTT::Homie::Device.new(MQTT::Homie.escape_id(config["device_uuid"]), "Awair Air Quality Sensor", mqtt: ARGV[1])
 homie.home_assistant_device = {
   manufacturer: "Awair Inc.",
@@ -60,16 +51,16 @@ device.property("score",
 device.property("dewpoint",
                 "Dew Point",
                 :float,
-                convert_unit(data["dew_point"], fahrenheit),
-                unit: unit,
+                data["dew_point"],
+                unit: "°C",
                 hass: { sensor: { device_class: :temperature,
                                   icon: "mdi:water-opacity",
                                   state_class: :measurement } })
 device.property("temperature",
                 "Current Temperature",
                 :float,
-                convert_unit(data["temp"], fahrenheit),
-                unit: unit,
+                data["temp"],
+                unit: "°C",
                 hass: { sensor: { device_class: :temperature,
                                   state_class: :measurement } })
 device.property("relative-humidity",
@@ -105,8 +96,8 @@ homie.publish
 loop do
   data = awair.get.body
   device["score"].value = data["score"]
-  device["dewpoint"].value = convert_unit(data["dew_point"], fahrenheit)
-  device["temperature"].value = convert_unit(data["temp"], fahrenheit)
+  device["dewpoint"].value = data["dew_point"]
+  device["temperature"].value = data["temp"]
   device["relative-humidity"].value = data["humid"]
   device["co2"].value = data["co2"]
   device["tvocs"].value = data["voc"]
